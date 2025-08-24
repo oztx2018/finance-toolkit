@@ -1,8 +1,17 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect } from 'react';
 import {
-  Box, Container, Heading, Text, SimpleGrid, Input, Select, Button, Stat, StatLabel, StatNumber,
-  Table, Thead, Tbody, Tr, Th, Td, useColorModeValue, Tabs, Tab, TabList, TabPanels, TabPanel, HStack, VStack, Badge
-} from '@chakra-ui/react'
+Box, Container, Heading, Text, SimpleGrid, Input, Select, Button, Stat, StatLabel, StatNumber,
+Table, Thead, Tbody, Tr, Th, Td, useColorModeValue, Tabs, Tab, TabList, TabPanels, TabPanel, HStack, Badge, IconButton, useColorMode, Link as CLink
+} from '@chakra-ui/react';
+import { Helmet } from 'react-helmet-async';
+import { SunIcon, MoonIcon } from '@chakra-ui/icons';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, AreaChart, Area } from 'recharts';
+import { HashRouter, Routes, Route, Link } from 'react-router-dom';
+import Blog from './pages/Blog.jsx';                 
+import Post from './pages/Post.jsx';
+import Privacy from './pages/Privacy.jsx';
+import Terms from './pages/Terms.jsx';
+import {POSTS} from './post.js';
 
 const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
 const toNumber = (v, fallback = 0) => {
@@ -69,6 +78,40 @@ function StatCard({ label, value }) {
   );
 }
 
+function LoanChart({ data }) {
+  const stroke = useColorModeValue('#5B21B6', '#C4B5FD');
+  return (
+    <Box h={{ base: 220, md: 280 }} mt={4} borderWidth="1px" rounded="xl">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <XAxis dataKey="month" tickCount={6} />
+          <YAxis tickCount={6} />
+          <Tooltip formatter={(v) => v.toLocaleString()} />
+          <Line type="monotone" dataKey="balance" stroke={stroke} strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+}
+
+function MortgageChart({ data }) {
+  const fill1 = useColorModeValue('#A78BFA', '#7C3AED');
+  const fill2 = useColorModeValue('#93C5FD', '#1D4ED8');
+  return (
+    <Box h={{ base: 220, md: 280 }} mt={4} borderWidth="1px" rounded="xl">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <XAxis dataKey="month" tickCount={6} />
+          <YAxis tickCount={6} />
+          <Tooltip formatter={(v) => v.toLocaleString()} />
+          <Area type="monotone" dataKey="interest" stackId="1" stroke="none" fill={fill1} fillOpacity={0.5} />
+          <Area type="monotone" dataKey="principal" stackId="1" stroke="none" fill={fill2} fillOpacity={0.5} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+}
+
 function LoanCalculator() {
   const [principal, setPrincipal] = useState(25000);
   const [apr, setApr] = useState(6.9);
@@ -88,6 +131,9 @@ function LoanCalculator() {
       schedule.map((m) => [m.month, m.payment.toFixed(2), m.interest.toFixed(2), m.principal.toFixed(2), m.balance.toFixed(2)])
     );
   }, [schedule]);
+
+  // chart data: first 60 months (or all if shorter)
+  const chartData = useMemo(() => schedule.slice(0, 60).map(m => ({ month: m.month, balance: Math.round(m.balance) })), [schedule]);
 
   return (
     <Box rounded="2xl" boxShadow="sm" borderWidth="1px" bg={useColorModeValue('white', 'gray.900')} p={6}>
@@ -123,6 +169,8 @@ function LoanCalculator() {
         <StatCard label="Total Interest" value={fmtMoney(totalInterest, currency)} />
         <StatCard label="Total Paid" value={fmtMoney(totalPaid, currency)} />
       </SimpleGrid>
+
+      <LoanChart data={chartData} />
 
       <HStack mt={4} spacing={3}>
         <Button variant="outline" onClick={() => setShowAll(s => !s)}>{showAll ? 'Show First 12 Months' : 'Show Full Schedule'}</Button>
@@ -177,6 +225,8 @@ function MortgageCalculator() {
   const totalMonthly = baseMonthly + extras;
   const totalPaid = schedule.reduce((s, m) => s + m.payment, 0) + extras * schedule.length;
 
+  const chartData = useMemo(() => schedule.slice(0, 60).map(m => ({ month: m.month, interest: Math.round(m.interest), principal: Math.round(m.principal) })), [schedule]);
+
   return (
     <Box rounded="2xl" boxShadow="sm" borderWidth="1px" bg={useColorModeValue('white', 'gray.900')} p={6}>
       <Heading size="md" mb={4}>Mortgage Calculator</Heading>
@@ -199,6 +249,8 @@ function MortgageCalculator() {
         <StatCard label="Total Interest (P&I)" value={fmtMoney(totalInterest, currency)} />
         <StatCard label="Total Cost (incl. extras)" value={fmtMoney(totalPaid, currency)} />
       </SimpleGrid>
+
+      <MortgageChart data={chartData} />
 
       <Box mt={3} overflowX="auto" borderWidth="1px" rounded="xl">
         <Table size="sm">
@@ -226,11 +278,11 @@ const DEFAULT_RATES_USD = { EUR: 0.91, TRY: 34.0, GBP: 0.77, AUD: 1.48, CAD: 1.3
 function CurrencyConverter() {
   const [amount, setAmount] = useState(100);
   const [from, setFrom] = useState('USD');
-  const [to, setTo] = useState('TRY');
+  const [to, setTo] = useState('EUR');
   const [rates, setRates] = useState(DEFAULT_RATES_USD);
   const [status, setStatus] = useState('offline');
 
-  const currencies = ['USD','TRY','EUR','GBP','AUD','CAD','JPY'];
+  const currencies = ['USD','EUR','GBP','AUD','CAD','JPY','TRY','INR','CNY','CHF','HKD','NZD','SEK','KRW','SGD','NOK','MXN','RUB','ZAR'];
 
   const convert = (amt, fromCode, toCode) => {
     if (!rates[fromCode] || !rates[toCode]) return 0;
@@ -281,22 +333,64 @@ function CurrencyConverter() {
   );
 }
 
-export default function App() {
+function ThemeToggle() {
+  const { colorMode, toggleColorMode } = useColorMode();
+  const isDark = colorMode === 'dark';
+  return (
+    <IconButton
+      aria-label="Toggle color mode"
+      onClick={toggleColorMode}
+      icon={isDark ? <SunIcon /> : <MoonIcon />}
+      variant="ghost"
+    />
+  );
+};
+
+function FAQJsonLD() {
+const faqs = [
+// EN
+{ q: 'How is the monthly loan payment calculated?', a: 'We use the standard amortization formula with the given APR and term, returning principal and interest split.' },
+{ q: 'Do the mortgage results include taxes and insurance?', a: 'Yes. You can enter monthly estimates for property tax, insurance, and HOA to include them.' },
+{ q: 'Are currency rates live?', a: 'We fetch recent rates from exchangerate.host and fall back to offline defaults if unavailable.' },
+{ q: 'Can I download the amortization schedule?', a: 'Yes. Use the Download CSV button to export your full schedule.' },
+{ q: 'Is this financial advice?', a: 'No. This tool is for educational purposes only and does not constitute financial advice.' },
+// TR
+{ q: 'Aylık kredi taksiti nasıl hesaplanır?', a: 'APR (yıllık faiz) ve vade ile standart amortisman formülü kullanılır; taksit, faiz ve anapara olarak ayrıştırılır.' },
+{ q: 'Konut kredisi sonucuna vergi ve sigorta dahil mi?', a: 'Evet. Aylık emlak vergisi, sigorta ve site aidatı (HOA) alanlarına değer girerek toplam tutara ekleyebilirsiniz.' },
+{ q: 'Kur değerleri canlı mı?', a: 'USD bazlı güncel kurları exchangerate.host üzerinden çekiyoruz; servis erişilemezse varsayılan değerlere geri düşer.' },
+{ q: 'Amortisman tablosunu indirebilir miyim?', a: 'Evet. Tam tabloyu indirmek için CSV indir butonunu kullanabilirsiniz.' },
+{ q: 'Bu uygulama finansal danışmanlık sağlar mı?', a: 'Hayır. Bu araç yalnızca eğitim amaçlıdır ve finansal danışmanlık değildir.' }
+];
+const json = {
+'@context': 'https://schema.org',
+'@type': 'FAQPage',
+mainEntity: faqs.map(({ q, a }) => ({
+'@type': 'Question',
+name: q,
+acceptedAnswer: { '@type': 'Answer', text: a }
+}))
+};
+return (
+<Helmet>
+<script type="application/ld+json">{JSON.stringify(json)}</script>
+</Helmet>
+);
+}
+
+
+function Home() {
+  const bg = useColorModeValue('gray.50', 'gray.800');
+  const headerBg = useColorModeValue('whiteAlpha.800', 'gray.900');
   useEffect(() => { document.title = 'Finance Toolkit – Loan • Mortgage • Currency'; }, []);
   return (
-    <Box minH="100vh" bg={useColorModeValue('gray.50', 'gray.800')}>
-      <Box position="sticky" top="0" zIndex="10" bg={useColorModeValue('whiteAlpha.800','gray.900')} backdropFilter="saturate(180%) blur(8px)" borderBottomWidth="1px">
-        <Container maxW="6xl" py={3} display="flex" alignItems="center" justifyContent="space-between">
-          <HStack spacing={3}>
-            <Box w="36px" h="36px" bg="purple.600" color="white" rounded="xl" display="grid" placeItems="center" fontWeight="bold">FT</Box>
-            <Box>
-              <Heading size="md">Finance Toolkit</Heading>
-              <Text fontSize="xs" color="gray.500">Loan • Mortgage • Currency</Text>
-            </Box>
-          </HStack>
-          <Text fontSize="sm" color="purple.700">by Ozzie</Text>
-        </Container>
-      </Box>
+    <Box minH="100vh" bg={bg}>
+      <Helmet>
+        <title>Finance Toolkit – Loan • Mortgage • Currency</title>
+        <meta name="description" content="Loan calculator with amortization, mortgage calculator with taxes & insurance, and currency converter with live rates." />
+        <link rel="canonical" href="https://financetool.net/" />
+      </Helmet>
+      <FAQJsonLD />
+
 
       <Container maxW="6xl" py={{ base: 6, md: 10 }}>
         <Tabs variant="soft-rounded" colorScheme="purple">
@@ -312,10 +406,59 @@ export default function App() {
           </TabPanels>
         </Tabs>
 
+
         <Box mt={10}>
           <Text fontSize="xs" color="gray.500">Disclaimer: This tool is for educational purposes only and does not constitute financial advice. Rates and results are estimates.</Text>
         </Box>
       </Container>
-    </Box>
-  )
+      </Box>
+  );
+};
+
+export default function App() {
+  const headerBg = useColorModeValue('whiteAlpha.800', 'gray.900');
+  const footerBg = useColorModeValue('white', 'gray.900');
+  return (
+    <HashRouter>
+      <Box position="sticky" top="0" zIndex="10" bg={headerBg} backdropFilter="saturate(180%) blur(8px)" borderBottomWidth="1px">
+        <Container maxW="6xl" py={3} display="flex" alignItems="center" justifyContent="space-between">
+          <HStack spacing={3}>
+            <Box w="36px" h="36px" bg="purple.600" color="white" rounded="xl" display="grid" placeItems="center" fontWeight="bold">FT</Box>
+            <Box>
+              <Heading size="md">Finance Toolkit</Heading>
+              <Text fontSize="xs" color="gray.500">Loan • Mortgage • Currency</Text>
+            </Box>
+          </HStack>
+          <HStack spacing={5}>
+            <CLink as={Link} to="/" fontSize="sm">Home</CLink>
+            <CLink as={Link} to="/blog" fontSize="sm">Blog</CLink>
+            <CLink as={Link} to="/privacy" fontSize="sm">Privacy</CLink>
+            <CLink as={Link} to="/terms" fontSize="sm">Terms</CLink>
+            <ThemeToggle />
+          </HStack>
+        </Container>
+      </Box>
+
+
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/blog" element={<Blog />} />
+        <Route path="/blog/:slug" element={<Post />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+      </Routes>
+
+
+      <Box as="footer" bg={footerBg} borderTopWidth="1px" mt={10}>
+        <Container maxW="6xl" py={6} display="flex" gap={4} flexWrap="wrap" justifyContent="space-between" alignItems="center">
+          <Text fontSize="sm" color="gray.500">© {new Date().getFullYear()} Finance Toolkit</Text>
+          <HStack spacing={4}>
+            <CLink as={Link} to="/privacy" fontSize="sm" color="purple.600">Privacy</CLink>
+            <CLink as={Link} to="/terms" fontSize="sm" color="purple.600">Terms</CLink>
+            <CLink as={Link} to="/blog" fontSize="sm" color="purple.600">Blog</CLink>
+          </HStack>
+        </Container>
+      </Box>
+    </HashRouter>
+  );
 }
