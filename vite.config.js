@@ -3,5 +3,5 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/finance-toolkit/', // <-- if repo name differs, change this
+  base: '/', // <-- if repo name differs, change this
 })
