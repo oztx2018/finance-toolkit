@@ -274,35 +274,54 @@ function MortgageCalculator() {
   );
 }
 
-const DEFAULT_RATES_USD = { EUR: 0.91, TRY: 34.0, GBP: 0.77, AUD: 1.48, CAD: 1.35, JPY: 155.0, USD: 1 };
 function CurrencyConverter() {
   const [amount, setAmount] = useState(100);
   const [from, setFrom] = useState('USD');
   const [to, setTo] = useState('EUR');
-  const [rates, setRates] = useState(DEFAULT_RATES_USD);
-  const [status, setStatus] = useState('offline');
+  const [rates, setRates] = useState({ USD: 1 }); // dynamic, USD pivot
+  const [status, setStatus] = useState('offline'); // 'offline' | 'loading' | 'live'
 
-  const currencies = ['USD','EUR','GBP','AUD','CAD','JPY','TRY','INR','CNY','CHF','HKD','NZD','SEK','KRW','SGD','NOK','MXN','RUB','ZAR'];
+  // Build currency list from fetched rates (fallback to a common list early on)
+  const fallbackList = ['USD','EUR','GBP','AUD','CAD','JPY','TRY','INR','CNY','CHF','HKD','NZD','SEK','KRW','SGD','NOK','MXN','RUB','ZAR'];
+  const currencyList = useMemo(() => {
+    const keys = Object.keys(rates || {});
+    return keys.length ? keys.sort() : fallbackList;
+  }, [rates]);
 
+  // Convert using USD as pivot: amt * (rate[to] / rate[from])
   const convert = (amt, fromCode, toCode) => {
-    if (!rates[fromCode] || !rates[toCode]) return 0;
-    const amtInUSD = amt / (rates[fromCode] || 1);
-    return amtInUSD * (rates[toCode] || 1);
+    if (fromCode === toCode) return amt;
+    const rFrom = rates[fromCode];
+    const rTo   = rates[toCode];
+    if (!rFrom || !rTo) return 0;
+    return amt * (rTo / rFrom);
   };
   const result = useMemo(() => convert(toNumber(amount), from, to), [amount, from, to, rates]);
+
+  // Load/save last known rates (so the UI still works offline)
+  const loadCachedRates = () => {
+    try {
+      const raw = localStorage.getItem('ft_rates_usd');
+      if (!raw) return null;
+      const { ts, rates } = JSON.parse(raw);
+      // accept cache up to 24h old
+      if (Date.now() - ts < 24 * 60 * 60 * 1000 && rates && rates.USD === 1) return rates;
+    } catch {}
+    return null;
+  };
 
   const fetchRates = async () => {
     try {
       setStatus('loading');
-      const res = await fetch('https://api.exchangerate.host/latest?base=USD');
+      const res = await fetch('https://api.exchangerate.host/latest?base=USD&places=8');
       const data = await res.json();
       if (data && data.rates) {
-        const next = { ...DEFAULT_RATES_USD };
-        for (const c of Object.keys(next)) {
-          if (data.rates[c]) next[c] = data.rates[c];
-        }
+        const next = { USD: 1, ...data.rates }; // ensure USD exists
         setRates(next);
         setStatus('live');
+        try {
+          localStorage.setItem('ft_rates_usd', JSON.stringify({ ts: Date.now(), rates: next }));
+        } catch {}
       } else {
         setStatus('offline');
       }
@@ -311,21 +330,42 @@ function CurrencyConverter() {
     }
   };
 
-  useEffect(() => { fetchRates(); }, []);
+  useEffect(() => {
+    const cached = loadCachedRates();
+    if (cached) setRates(cached);
+    fetchRates();
+  }, []);
 
   return (
     <Box rounded="2xl" boxShadow="sm" borderWidth="1px" bg={useColorModeValue('white', 'gray.900')} p={6}>
       <Heading size="md" mb={4}>Currency Converter</Heading>
       <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-        <Box><Text fontSize="sm" color="gray.600">Amount</Text><Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="1" /></Box>
-        <Box><Text fontSize="sm" color="gray.600">From</Text><Select value={from} onChange={(e) => setFrom(e.target.value)}>{currencies.map(c => <option key={c} value={c}>{c}</option>)}</Select></Box>
-        <Box><Text fontSize="sm" color="gray.600">To</Text><Select value={to} onChange={(e) => setTo(e.target.value)}>{currencies.map(c => <option key={c} value={c}>{c}</option>)}</Select></Box>
+        <Box>
+          <Text fontSize="sm" color="gray.600">Amount</Text>
+          <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" />
+        </Box>
+        <Box>
+          <Text fontSize="sm" color="gray.600">From</Text>
+          <Select value={from} onChange={(e) => setFrom(e.target.value)}>
+            {currencyList.map(c => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Box>
+        <Box>
+          <Text fontSize="sm" color="gray.600">To</Text>
+          <Select value={to} onChange={(e) => setTo(e.target.value)}>
+            {currencyList.map(c => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Box>
       </SimpleGrid>
+
       <HStack mt={4} spacing={3}>
         <Button variant="outline" onClick={() => { const a = from; setFrom(to); setTo(a); }}>Swap</Button>
         <Button onClick={fetchRates}>Fetch Live Rates</Button>
-        <Badge colorScheme={status === 'live' ? 'green' : status === 'loading' ? 'yellow' : 'gray'}>{status}</Badge>
+        <Badge colorScheme={status === 'live' ? 'green' : status === 'loading' ? 'yellow' : 'gray'}>
+          {status}
+        </Badge>
       </HStack>
+
       <Box mt={6}>
         <StatCard label="Converted" value={fmtMoney(result, to)} />
       </Box>
